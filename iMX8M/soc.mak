@@ -138,7 +138,26 @@ u-boot-atf-tee.bin: u-boot.bin bl31.bin $(TEE)
 
 .PHONY: clean
 clean:
-	@rm -f $(MKIMG) u-boot-atf.bin u-boot-atf-tee.bin u-boot-spl-ddr.bin u-boot.itb u-boot.its u-boot-ddr3l.itb u-boot-ddr3l.its u-boot-spl-ddr3l.bin u-boot-ddr4.itb u-boot-ddr4.its u-boot-spl-ddr4.bin u-boot-ddr4-evk.itb u-boot-ivt.itb u-boot-ddr4-evk.its $(OUTIMG)
+	@rm -f $(MKIMG) u-boot-atf.bin u-boot-atf-tee.bin \
+	u-boot-spl-ddr.bin u-boot.itb \
+	u-boot.its u-boot-ddr3l.itb \
+	u-boot-ddr3l.its u-boot-spl-ddr3l.bin \
+	u-boot-ddr4.itb u-boot-ddr4.its \
+	u-boot-spl-ddr4.bin u-boot-ddr4-evk.itb \
+	u-boot-ivt.itb u-boot-ddr4-evk.its \
+	u-boot-itx-p-c444.its u-boot-itx-p-c444.itb $(OUTIMG)
+
+dtb_itx_p_c444 = itx-p-c444.dtb.dtb
+$(dtb_itx_p_c444):
+	./$(DTB_PREPROC) $(PLAT)-itx-p-c444.dtb $(dtb_itx_p_c444) $(dtbs)
+
+u-boot-itx-p-c444.itb: $(dtb_itx_p_c444)
+	./$(PAD_IMAGE) $(TEE)
+	./$(PAD_IMAGE) bl31.bin
+	./$(PAD_IMAGE) u-boot-nodtb.bin $(dtb_itx_p_c444)
+	BL32=$(TEE) DEK_BLOB_LOAD_ADDR=$(DEK_BLOB_LOAD_ADDR) TEE_LOAD_ADDR=$(TEE_LOAD_ADDR) ATF_LOAD_ADDR=$(ATF_LOAD_ADDR) ./mkimage_fit_atf.sh $(dtb_itx_p_c444) > u-boot-itx-p-c444.its
+	./mkimage_uboot -E -p 0x3000 -f u-boot-itx-p-c444.its u-boot-itx-p-c444.itb
+	@rm -f u-boot.its $(dtb)
 
 dtb = evk.dtb
 $(dtb):
@@ -204,12 +223,22 @@ ifeq ($(HDMI),yes)
 flash_evk: $(MKIMG) signed_hdmi_imx8m.bin u-boot-spl-ddr.bin u-boot.itb
 	./mkimage_imx8 -fit -signed_hdmi signed_hdmi_imx8m.bin -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -second_loader u-boot.itb 0x40200000 0x60000 -out $(OUTIMG)
 
+flash_itx_p_c444: $(MKIMG) signed_hdmi_imx8m.bin u-boot-spl-ddr.bin u-boot-itx-p-c444.itb
+	./mkimage_imx8 -fit -signed_hdmi signed_hdmi_imx8m.bin -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -second_loader u-boot-itx-p-c444.itb 0x40200000 0x60000 -out $(OUTIMG)
+
 flash_evk_dual_bootloader: $(MKIMG) signed_hdmi_imx8m.bin u-boot-spl-ddr.bin u-boot.itb
 	./mkimage_imx8 -fit -signed_hdmi signed_hdmi_imx8m.bin -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -out $(OUTIMG)
 	./mkimage_imx8 -fit_ivt u-boot.itb 0x40200000 0x0 -out u-boot-ivt.itb
 
+flash_itx_p_c444_dual_bootloader: $(MKIMG) signed_hdmi_imx8m.bin u-boot-spl-ddr.bin u-boot-itx-p-c444.itb
+	./mkimage_imx8 -fit -signed_hdmi signed_hdmi_imx8m.bin -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -out $(OUTIMG)
+	./mkimage_imx8 -fit_ivt u-boot-itx-p-c444.itb 0x40200000 0x0 -out u-boot-ivt.itb
+
 flash_evk_emmc_fastboot: $(MKIMG) signed_hdmi_imx8m.bin u-boot-spl-ddr.bin u-boot.itb
 	./mkimage_imx8 -dev emmc_fastboot -fit -signed_hdmi signed_hdmi_imx8m.bin -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -second_loader u-boot.itb 0x40200000 0x60000 -out $(OUTIMG)
+
+flash_itx_p_c444_emmc_fastboot: $(MKIMG) signed_hdmi_imx8m.bin u-boot-spl-ddr.bin u-boot-itx-p-c444.itb
+	./mkimage_imx8 -dev emmc_fastboot -fit -signed_hdmi signed_hdmi_imx8m.bin -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -second_loader u-boot-itx-p-c444.itb 0x40200000 0x60000 -out $(OUTIMG)
 
 flash_dp_evk: $(MKIMG) signed_dp_imx8m.bin u-boot-spl-ddr.bin u-boot.itb
 	./mkimage_imx8 -fit -signed_hdmi signed_dp_imx8m.bin -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -second_loader u-boot.itb 0x40200000 0x60000 -out $(OUTIMG)
@@ -224,6 +253,10 @@ else
 flash_evk: flash_evk_no_hdmi
 
 flash_evk_emmc_fastboot: flash_evk_no_hdmi_emmc_fastboot
+
+flash_itx_p_c444: flash_itx_p_c444_no_hdmi
+
+flash_itx_p_c444_emmc_fastboot: flash_itx_p_c444_no_hdmi_emmc_fastboot
 
 flash_ddr4_evk: flash_ddr4_evk_no_hdmi
 
@@ -243,12 +276,22 @@ endif
 flash_evk_no_hdmi: $(MKIMG) u-boot-spl-ddr.bin u-boot.itb
 	./mkimage_imx8 -version $(VERSION) -fit -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -second_loader u-boot.itb 0x40200000 0x60000 -out $(OUTIMG)
 
+flash_itx_p_c444_no_hdmi: $(MKIMG) u-boot-spl-ddr.bin u-boot-itx-p-c444.itb
+	./mkimage_imx8 -version $(VERSION) -fit -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -second_loader u-boot-itx-p-c444.itb 0x40200000 0x60000 -out $(OUTIMG)
+
 flash_evk_no_hdmi_dual_bootloader: $(MKIMG) u-boot-spl-ddr.bin u-boot.itb
+	./mkimage_imx8 -version $(VERSION) -fit -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -out $(OUTIMG)
+	./mkimage_imx8 -fit_ivt u-boot.itb 0x40200000 0x0 -out u-boot-ivt.itb
+
+flash_itx_p_c444_no_hdmi_dual_bootloader: $(MKIMG) u-boot-spl-ddr.bin u-boot-itx-p-c444.itb
 	./mkimage_imx8 -version $(VERSION) -fit -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -out $(OUTIMG)
 	./mkimage_imx8 -fit_ivt u-boot.itb 0x40200000 0x0 -out u-boot-ivt.itb
 
 flash_evk_no_hdmi_emmc_fastboot: $(MKIMG) u-boot-spl-ddr.bin u-boot.itb
 	./mkimage_imx8 -version $(VERSION) -dev emmc_fastboot -fit -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -second_loader u-boot.itb 0x40200000 0x60000 -out $(OUTIMG)
+
+flash_itx_p_c444_no_hdmi_emmc_fastboot: $(MKIMG) u-boot-spl-ddr.bin u-boot-itx-p-c444.itb
+	./mkimage_imx8 -version $(VERSION) -dev emmc_fastboot -fit -loader u-boot-spl-ddr.bin $(SPL_LOAD_ADDR) -second_loader u-boot-itx-p-c444.itb 0x40200000 0x60000 -out $(OUTIMG)
 
 flash_ddr3l_val_no_hdmi: $(MKIMG) u-boot-spl-ddr3l.bin u-boot-ddr3l.itb
 	./mkimage_imx8 -version $(VERSION) -fit -loader u-boot-spl-ddr3l.bin $(SPL_LOAD_ADDR) -second_loader u-boot-ddr3l.itb 0x40200000 0x60000 -out $(OUTIMG)
@@ -290,6 +333,13 @@ print_fit_hab: u-boot-nodtb.bin bl31.bin $(dtb)
 	./$(PAD_IMAGE) u-boot-nodtb.bin $(dtb)
 	TEE_LOAD_ADDR=$(TEE_LOAD_ADDR) ATF_LOAD_ADDR=$(ATF_LOAD_ADDR) VERSION=$(VERSION) ./print_fit_hab.sh $(PRINT_FIT_HAB_OFFSET) $(dtb)
 	@rm -f $(dtb)
+
+print_fit_hab_itx_p_c444: u-boot-nodtb.bin bl31.bin $(dtb_itx_p_c444)
+	./$(PAD_IMAGE) $(TEE)
+	./$(PAD_IMAGE) bl31.bin
+	./$(PAD_IMAGE) u-boot-nodtb.bin $(dtb_itx_p_c444)
+	TEE_LOAD_ADDR=$(TEE_LOAD_ADDR) ATF_LOAD_ADDR=$(ATF_LOAD_ADDR) VERSION=$(VERSION) ./print_fit_hab.sh $(PRINT_FIT_HAB_OFFSET) $(dtb_itx_p_c444)
+	@rm -f $(dtb_itx_p_c444)
 
 print_fit_hab_ddr4: u-boot-nodtb.bin bl31.bin $(dtb_ddr4_evk)
 	./$(PAD_IMAGE) $(TEE)
